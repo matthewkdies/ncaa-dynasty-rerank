@@ -1,0 +1,80 @@
+[project]
+site_name = "ncaa-dynasty-rerank"
+site_description = "Automated CFP, AP, and Coaches poll re-ranking engine for NCAA Football 14 dynasty saves."
+site_author = "Matthew Dies"
+site_url = "https://matthewkdies.github.io/ncaa-dynasty-rerank/"
+
+repo_url = "https://github.com/matthewkdies/ncaa-dynasty-rerank"
+repo_name = "matthewkdies/ncaa-dynasty-rerank"
+edit_uri = "edit/main/docs/"
+
+exclude_docs = """
+superpowers/*
+"""
+
+nav = [
+  { "Overview" = "index.md" },
+  { "Installation" = "installation.md" },
+  { "CLI Usage" = "usage.md" },
+  { "Rule Configuration" = "configuration.md" },
+  { "Python API" = "python-api.md" },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.action.view",
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "indigo"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "indigo"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+toc.permalink = true
+pymdownx.betterem = {}
+pymdownx.caret = {}
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+pymdownx.tasklist.custom_checkbox = true
+pymdownx.tilde = {}
