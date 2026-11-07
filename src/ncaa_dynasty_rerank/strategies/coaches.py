@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def generate_coaches_points(rank: int, max_points: int = 1550, total_voters: int = 62) -> int:
     """Generates authentic Coaches poll points curve from 62 coaches."""
     if rank > 25:
-        return max(5, int(75 - (rank - 25) * 15)) if rank <= 30 else 0
+        return max(0, int(42 - (rank - 26) * 8)) if rank <= 30 else 0
     base = (26 - rank) * total_voters
     decay = 1.0 - math.pow((rank - 1) / 25.0, 1.4) * 0.18
     return min(max_points, max(50, int(base * decay)))

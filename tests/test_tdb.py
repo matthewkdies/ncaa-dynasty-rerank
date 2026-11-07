@@ -112,3 +112,49 @@ def test_tdb_duplicate_tgid_and_non_fbs_filtering(tmp_path):
 
     assert rec1_rank == 77
     assert rec3_rank == 0
+
+
+def test_tdb_crc_update_on_save(synthetic_save):
+    from ncaa_dynasty_rerank.tdb import TdbCrc
+
+    tdb = TDBFile(synthetic_save)
+    team_table = tdb.tables["TEAM"]
+    schd_table = tdb.tables["SCHD"]
+    initial_schd_prior_crc = schd_table.header.prior_crc
+
+    # Modify TEAM table
+    tdb.update_team_polls([{"tgid": 1, "ap_rank": 3, "ap_points": 1400}])
+    tdb.save()
+
+    # Reload file directly from disk and check SCHD's prior_crc header field
+    crc_calc = TdbCrc()
+    team_payload = bytes(team_table.field_defs_raw) + bytes(team_table.records_data)
+    expected_crc = crc_calc.checksum(team_payload)
+
+    reloaded = TDBFile(synthetic_save)
+    reloaded_schd = reloaded.tables["SCHD"]
+    assert reloaded_schd.header.prior_crc == expected_crc
+    assert reloaded_schd.header.prior_crc != initial_schd_prior_crc
+
+
+def test_update_schedule_games(synthetic_save):
+    tdb = TDBFile(synthetic_save)
+    schd = tdb.tables["SCHD"]
+    assert not schd.is_changed
+
+    # Update record 0 in SCHD
+    tdb.update_schedule_games([{"record_index": 0, "away_tgid": 99, "home_tgid": 88}])
+    assert schd.is_changed
+
+    bv = schd.get_record_bitview(0)
+    gatg = bv.get_bits(schd.fields["GATG"].offset, schd.fields["GATG"].bits)
+    ghtg = bv.get_bits(schd.fields["GHTG"].offset, schd.fields["GHTG"].bits)
+    assert gatg == 99
+    assert ghtg == 88
+
+    tdb.save()
+    reloaded = TDBFile(synthetic_save)
+    reloaded_schd = reloaded.tables["SCHD"]
+    reloaded_bv = reloaded_schd.get_record_bitview(0)
+    assert reloaded_bv.get_bits(schd.fields["GATG"].offset, schd.fields["GATG"].bits) == 99
+    assert reloaded_bv.get_bits(schd.fields["GHTG"].offset, schd.fields["GHTG"].bits) == 88

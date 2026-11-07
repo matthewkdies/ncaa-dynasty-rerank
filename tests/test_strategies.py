@@ -39,3 +39,18 @@ def test_custom_poll_strategy_registration():
     assert ranked[0].rank == 1
     assert ranked[0].score == 100.0
     assert ranked[1].rank == 2
+
+
+def test_poll_points_strictly_decrease():
+    from ncaa_dynasty_rerank.strategies.ap import generate_ap_points
+    from ncaa_dynasty_rerank.strategies.coaches import generate_coaches_points
+
+    # Verify both curves are strictly monotonically non-increasing
+    for r in range(1, 30):
+        ap_curr = generate_ap_points(r)
+        ap_next = generate_ap_points(r + 1)
+        assert ap_curr > ap_next, f"AP points inverted at rank {r}: {ap_curr} <= {ap_next}"
+
+        coaches_curr = generate_coaches_points(r)
+        coaches_next = generate_coaches_points(r + 1)
+        assert coaches_curr > coaches_next, f"Coaches points inverted at rank {r}: {coaches_curr} <= {coaches_next}"

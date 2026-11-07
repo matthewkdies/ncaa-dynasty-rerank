@@ -33,6 +33,34 @@ class TDBTableHeader:
     header_crc: int
 
 
+class TdbCrc:
+    """Big-endian CRC-32 calculator matching EA Sports TDB database specification."""
+
+    def __init__(self) -> None:
+        self.poly = 79764919  # 0x04C11DB7
+        e = 0x80000000
+        table = [0]
+        n = 1
+        while n < 16:
+            e = ((e << 1) & 0xFFFFFFFF) ^ (0 if (e & 0x80000000) == 0 else self.poly)
+            for r in range(n):
+                table.append(e ^ table[r])
+            n <<= 1
+        self.table = table
+
+    def crc32_be(self, e: int, data: bytes | bytearray) -> int:
+        e = (0xFFFFFFFF ^ e) & 0xFFFFFFFF
+        table = self.table
+        for b in data:
+            e = (e ^ (b << 24)) & 0xFFFFFFFF
+            e = (((e << 4) & 0xFFFFFFFF) ^ table[(e >> 28) & 0xF]) & 0xFFFFFFFF
+            e = (((e << 4) & 0xFFFFFFFF) ^ table[(e >> 28) & 0xF]) & 0xFFFFFFFF
+        return (0xFFFFFFFF ^ e) & 0xFFFFFFFF
+
+    def checksum(self, data: bytes | bytearray) -> int:
+        return (~self.crc32_be(0, data)) & 0xFFFFFFFF
+
+
 class TDBTable:
     def __init__(
         self,
@@ -40,6 +68,7 @@ class TDBTable:
         table_offset: int,
         header: TDBTableHeader,
         fields: dict[str, TDBFieldDef],
+        field_defs_raw: bytes,
         records_data: bytearray,
         file_records_offset: int,
     ):
@@ -47,6 +76,7 @@ class TDBTable:
         self.table_offset = table_offset
         self.header = header
         self.fields = fields
+        self.field_defs_raw = field_defs_raw
         self.records_data = records_data
         self.file_records_offset = file_records_offset
         self.is_changed = False
@@ -71,6 +101,8 @@ class TDBFile:
         self.tables: dict[str, TDBTable] = {}
         self.num_tables: int = 0
         self.table_data_start: int = 0
+        self.db_size: int = 0
+        self.table_order: list[tuple[str, int]] = []
         self._load()
 
     def _load(self) -> None:
@@ -79,21 +111,27 @@ class TDBFile:
             if len(hdr) < 24:
                 raise ValueError(f"File {self.file_path} is too small to be a valid save.")
 
-            magic, _version, _endian, _u1, _u2, _db_size, _zero, num_tables, _u3 = struct.unpack(">HHBBHIIII", hdr)
+            magic, _version, _endian, _u1, _u2, db_size, _zero, num_tables, _u3 = struct.unpack(">HHBBHIIII", hdr)
             if magic != 0x4442:  # "DB"
                 raise ValueError(f"Invalid magic 0x{magic:04x}; expected 0x4442 (DB).")
 
             self.num_tables = num_tables
+            self.db_size = db_size
             defs_raw = f.read(num_tables * 8)
             self.table_data_start = f.tell()
 
             table_defs: dict[str, int] = {}
+            table_order_list: list[tuple[str, int]] = []
             for i in range(num_tables):
                 name_raw = defs_raw[i * 8 : i * 8 + 4]
                 # In big-endian files, table names are reversed 4-char ASCII strings
                 name = name_raw.decode("latin1", errors="ignore")[::-1]
                 offset = struct.unpack(">I", defs_raw[i * 8 + 4 : i * 8 + 8])[0]
                 table_defs[name] = offset
+                table_order_list.append((name, offset))
+
+            # Maintain deterministic file offset order of all tables
+            self.table_order = sorted(table_order_list, key=lambda t: t[1])
 
             # Load tables of interest (TEAM and SCHD)
             for target_name in ["TEAM", "SCHD"]:
@@ -138,10 +176,11 @@ class TDBFile:
                     hdr_crc,
                 )
 
+                fdefs_raw = f.read(16 * num_fields)
                 fields: dict[str, TDBFieldDef] = {}
-                for _ in range(num_fields):
-                    fdef_raw = f.read(16)
-                    ftype, foff, fname_raw, fbits = struct.unpack(">II4sI", fdef_raw)
+                for fi in range(num_fields):
+                    fdef_chunk = fdefs_raw[fi * 16 : fi * 16 + 16]
+                    ftype, foff, fname_raw, fbits = struct.unpack(">II4sI", fdef_chunk)
                     fname = fname_raw.decode("latin1", errors="ignore")[::-1]
                     fields[fname] = TDBFieldDef(fname, ftype, foff, fbits)
 
@@ -153,6 +192,7 @@ class TDBFile:
                     table_offset=t_offset,
                     header=header,
                     fields=fields,
+                    field_defs_raw=fdefs_raw,
                     records_data=records_data,
                     file_records_offset=records_offset,
                 )
@@ -264,6 +304,42 @@ class TDBFile:
 
         return games
 
+    def get_all_schedule_records(self) -> list[dict[str, Any]]:
+        """Returns all schedule records (both played and unplayed) from the SCHD table."""
+        if "SCHD" not in self.tables:
+            return []
+
+        schd_table = self.tables["SCHD"]
+        fields = schd_table.fields
+        records: list[dict[str, Any]] = []
+
+        for r_idx in range(schd_table.header.max_records):
+            bv = schd_table.get_record_bitview(r_idx)
+            away_tgid = bv.get_bits(fields["GATG"].offset, fields["GATG"].bits) if "GATG" in fields else 0
+            home_tgid = bv.get_bits(fields["GHTG"].offset, fields["GHTG"].bits) if "GHTG" in fields else 0
+            away_score = bv.get_bits(fields["GASC"].offset, fields["GASC"].bits) if "GASC" in fields else 0
+            home_score = bv.get_bits(fields["GHSC"].offset, fields["GHSC"].bits) if "GHSC" in fields else 0
+            week = bv.get_bits(fields["SEWN"].offset, fields["SEWN"].bits) if "SEWN" in fields else 0
+            sewt = bv.get_bits(fields["SEWT"].offset, fields["SEWT"].bits) if "SEWT" in fields else 0
+            sgnm = bv.get_bits(fields["SGNM"].offset, fields["SGNM"].bits) if "SGNM" in fields else 0
+            status = bv.get_bits(fields["GSTA"].offset, fields["GSTA"].bits) if "GSTA" in fields else 0
+
+            records.append(
+                {
+                    "record_index": r_idx,
+                    "sgnm": sgnm,
+                    "sewn": week,
+                    "sewt": sewt,
+                    "gsta": status,
+                    "gatg": away_tgid,
+                    "ghtg": home_tgid,
+                    "away_score": away_score,
+                    "home_score": home_score,
+                }
+            )
+
+        return records
+
     def update_team_polls(self, team_updates: list[dict[str, Any]]) -> None:
         """Updates poll fields for teams in the TEAM table."""
         if "TEAM" not in self.tables:
@@ -311,8 +387,34 @@ class TDBFile:
 
             team_table.write_record_bitview(r_idx, bv)
 
+    def update_schedule_games(self, game_updates: list[dict[str, Any]]) -> None:
+        """Updates team participants (GATG, GHTG) for specific records in the SCHD table."""
+        if "SCHD" not in self.tables:
+            raise KeyError("SCHD table not loaded.")
+
+        schd_table = self.tables["SCHD"]
+        fields = schd_table.fields
+        if "GATG" not in fields or "GHTG" not in fields:
+            raise KeyError("GATG or GHTG fields missing from SCHD table.")
+
+        gatg_def = fields["GATG"]
+        ghtg_def = fields["GHTG"]
+
+        for update in game_updates:
+            r_idx = update["record_index"]
+            if r_idx < 0 or r_idx >= schd_table.header.max_records:
+                continue
+
+            bv = schd_table.get_record_bitview(r_idx)
+            if "away_tgid" in update:
+                bv.set_bits(gatg_def.offset, int(update["away_tgid"]), gatg_def.bits)
+            if "home_tgid" in update:
+                bv.set_bits(ghtg_def.offset, int(update["home_tgid"]), ghtg_def.bits)
+
+            schd_table.write_record_bitview(r_idx, bv)
+
     def save(self, output_path: str | Path | None = None) -> None:
-        """Writes modified table record buffers back to the file."""
+        """Writes modified table record buffers back to the file and updates successor table CRCs."""
         target_path = Path(output_path or self.file_path).resolve()
 
         if target_path != self.file_path:
@@ -320,9 +422,41 @@ class TDBFile:
 
             shutil.copyfile(self.file_path, target_path)
 
+        crc_calc = TdbCrc()
         with open(target_path, "r+b") as f:
             for table in self.tables.values():
-                if table.is_changed:
-                    f.seek(table.file_records_offset)
-                    f.write(table.records_data)
-                    table.is_changed = False
+                if not table.is_changed:
+                    continue
+
+                # 1. Write modified records data
+                f.seek(table.file_records_offset)
+                f.write(table.records_data)
+                table.is_changed = False
+
+                # 2. Compute table checksum over field_defs + records_data
+                payload = bytes(table.field_defs_raw) + bytes(table.records_data)
+                calc_crc = crc_calc.checksum(payload)
+
+                # 3. Locate the table succeeding this one in file offset order
+                curr_idx = next(
+                    (i for i, (t_name, _) in enumerate(self.table_order) if t_name == table.name),
+                    None,
+                )
+                if curr_idx is None:
+                    continue
+
+                if curr_idx + 1 < len(self.table_order):
+                    # Next table's header starts with prior_crc (uint32 big-endian at offset 0)
+                    next_name, next_offset = self.table_order[curr_idx + 1]
+                    f.seek(self.table_data_start + next_offset)
+                    f.write(struct.pack(">I", calc_crc))
+                    if next_name in self.tables:
+                        self.tables[next_name].header.prior_crc = calc_crc
+                elif self.db_size > 0:
+                    # Last table in file: write to EOF CRC buffer at db_size - 4 if space exists
+                    f.seek(0, 2)
+                    file_len = f.tell()
+                    eof_offset = self.db_size - 4
+                    if eof_offset >= 0 and eof_offset + 4 <= file_len:
+                        f.seek(eof_offset)
+                        f.write(struct.pack(">I", calc_crc))

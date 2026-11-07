@@ -6,6 +6,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
@@ -16,6 +17,7 @@ from ncaa_dynasty_rerank.discover import find_dynasty_saves
 from ncaa_dynasty_rerank.engine import RankingEngine
 from ncaa_dynasty_rerank.models import GameRecord, PollRanking, TeamRecord
 from ncaa_dynasty_rerank.polls import PollGenerator
+from ncaa_dynasty_rerank.postseason import PostseasonSyncer
 from ncaa_dynasty_rerank.tdb import TDBFile
 
 console = Console()
@@ -177,11 +179,6 @@ def main() -> int:
         "--dry-run", action="store_true", help="Preview proposed rankings without modifying the save file"
     )
     parser.add_argument(
-        "--force-cfp",
-        action="store_true",
-        help="Force-write CFP rankings even before Week 8 when the in-game poll is dormant",
-    )
-    parser.add_argument(
         "-y", "--yes", action="store_true", help="Automatically apply changes without confirmation prompt"
     )
 
@@ -254,11 +251,21 @@ def main() -> int:
     poll_gen = PollGenerator(engine)
     cfp_poll, ap_poll, coaches_poll = poll_gen.generate_all()
 
-    cfp_is_active = any(t.cfp_rank > 0 for t in teams)
-    if not cfp_is_active and not args.force_cfp:
+    cfp_active = any(t.cfp_rank > 0 for t in teams)
+    if not cfp_active:
         console.print(
-            "[dim yellow]ℹ Note: CFP poll is currently dormant in-game (pre-Week 8). TBRK will remain 0 in save (use --force-cfp to override).[/dim yellow]\n"
+            "[dim yellow]ℹ Note: CFP/BCS poll is not yet active in this dynasty week (TBRK=0). "
+            "Preserving inactive state to prevent premature poll activation.[/dim yellow]\n"
         )
+
+    # Postseason bowl synchronization
+    all_schd_records = tdb.get_all_schedule_records()
+    postseason_syncer = PostseasonSyncer()
+    bowl_sync_result = None
+
+    if cfp_active and postseason_syncer.is_bowl_season(all_schd_records):
+        teams_by_tgid = {t.tgid: t for t in teams}
+        bowl_sync_result = postseason_syncer.sync_major_bowls(all_schd_records, cfp_poll, teams_by_tgid)
 
     # Display Top 25 tables
     console.print("\n[bold underline]PROPOSED RANKINGS[/bold underline]\n")
@@ -266,12 +273,28 @@ def main() -> int:
     display_poll_table("Associated Press (AP) Top 25 Poll", ap_poll, "ap")
     display_poll_table("USA Today Coaches Poll", coaches_poll, "coaches")
 
+    if bowl_sync_result and bowl_sync_result.diffs:
+        console.print("\n[bold underline]PROPOSED BOWL MATCHUP UPDATES[/bold underline]\n")
+        bowl_table = Table(title="Postseason Bowl Adjustments", box=box.ROUNDED)
+        bowl_table.add_column("Bowl Game", style="cyan", no_wrap=True)
+        bowl_table.add_column("Previous Matchup", style="dim")
+        bowl_table.add_column("New Matchup", style="bold green")
+        bowl_table.add_column("Reason", style="yellow")
+        for d in bowl_sync_result.diffs:
+            bowl_table.add_row(d.bowl_name, d.old_matchup, d.new_matchup, d.reason)
+        console.print(bowl_table)
+
     if args.dry_run:
-        console.print("[bold yellow]Dry-run mode active. No changes written to save file.[/bold yellow]")
+        console.print("\n[bold yellow]Dry-run mode active. No changes written to save file.[/bold yellow]")
         return 0
 
     # Confirmation
-    if not args.yes and not Confirm.ask("Apply these rankings to your save file?"):
+    confirm_msg = (
+        "Apply these rankings and bowl updates to your save file?"
+        if (bowl_sync_result and bowl_sync_result.updates)
+        else "Apply these rankings to your save file?"
+    )
+    if not args.yes and not Confirm.ask(confirm_msg):
         console.print("[dim]Aborted by user. Save file unchanged.[/dim]")
         return 0
 
@@ -281,25 +304,31 @@ def main() -> int:
 
     # Prepare update payload
     updates_by_tgid = {}
-    if cfp_is_active or args.force_cfp:
+    if cfp_active:
         for r in cfp_poll:
-            updates_by_tgid.setdefault(r.team.tgid, {})["cfp_rank"] = r.rank
+            u = updates_by_tgid.setdefault(r.team.tgid, {})
+            u["cfp_rank"] = r.rank
+            u["cfp_prev_rank"] = r.previous_rank
 
     for r in ap_poll:
         u = updates_by_tgid.setdefault(r.team.tgid, {})
         u["ap_rank"] = r.rank
+        u["ap_prev_rank"] = r.previous_rank
         u["ap_points"] = r.points
         u["ap_first_votes"] = r.first_place_votes
 
     for r in coaches_poll:
         u = updates_by_tgid.setdefault(r.team.tgid, {})
         u["coaches_rank"] = r.rank
+        u["coaches_prev_rank"] = r.previous_rank
         u["coaches_points"] = r.points
         u["coaches_first_votes"] = r.first_place_votes
 
     update_list = [{"tgid": tgid, **fields} for tgid, fields in updates_by_tgid.items()]
 
     tdb.update_team_polls(update_list)
+    if bowl_sync_result and bowl_sync_result.updates:
+        tdb.update_schedule_games(bowl_sync_result.updates)
     tdb.save()
 
     console.print("[bold green]✓ Successfully applied new rankings to save file![/bold green]")

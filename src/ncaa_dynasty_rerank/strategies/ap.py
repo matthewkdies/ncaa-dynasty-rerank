@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def generate_ap_points(rank: int, max_points: int = 1575, total_voters: int = 63) -> int:
     """Generates authentic AP poll points curve from 63 voters."""
     if rank > 25:
-        return max(5, int(80 - (rank - 25) * 15)) if rank <= 30 else 0
+        return max(0, int(42 - (rank - 26) * 8)) if rank <= 30 else 0
     base = (26 - rank) * total_voters
     decay = 1.0 - math.pow((rank - 1) / 25.0, 1.4) * 0.18
     return min(max_points, max(50, int(base * decay)))
