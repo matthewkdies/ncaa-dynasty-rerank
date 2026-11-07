@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ncaa-dynasty-rerank"
-version = "0.1.1"
+version = "0.2.0"
 description = "Automated CFP, AP, and Coaches poll re-ranking engine for NCAA Football 14 dynasty saves."
 readme = "README.md"
 requires-python = ">=3.10"

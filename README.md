@@ -130,8 +130,15 @@ ncaa-dynasty-rerank rules export
 # Export default rules to a custom location
 ncaa-dynasty-rerank rules export my_rules.json
 
-# Display currently active rules in the terminal
+# Display currently active rules in the terminal (syntax-highlighted JSON)
 ncaa-dynasty-rerank rules show
+
+# Display rules in a table view with descriptions
+ncaa-dynasty-rerank rules show -d
+
+# Inspect descriptions and defaults for all rules or filter by name
+ncaa-dynasty-rerank rules describe
+ncaa-dynasty-rerank rules describe margin
 
 # Validate a custom rules file
 ncaa-dynasty-rerank rules validate my_rules.json
@@ -140,19 +147,30 @@ ncaa-dynasty-rerank rules validate my_rules.json
 ncaa-dynasty-rerank rules path
 ```
 
-### Partial Overrides (Deep Merging)
+### Partial Overrides & Friendly Aliases
 
-You do **not** need to copy the entire configuration file to change a few settings. Any JSON file specified in `~/.config/ncaa-dynasty-rerank/rules.json` or passed via `--rules` is recursively deep-merged on top of defaults.
+You do not need to copy the entire configuration file to change a few settings. Any JSON file specified in `~/.config/ncaa-dynasty-rerank/rules.json` or passed via `--rules` is recursively deep-merged on top of defaults.
 
-For example, to boost Group of 5 undefeated teams in the AP poll, increase the margin cap, and tweak the SEC conference weight, create a `rules.json`:
+Conferences and teams accept friendly aliases (e.g. `"sec"`, `"big10"`, `"bama"`, `"osu"`, `"michigan"`) in addition to raw numeric IDs:
 
 ```json
 {
   "resume": {
     "margin_cap": 35,
     "conference_weights": {
-      "11": 1.25
-    }
+      "sec": 1.25,
+      "big10": 1.20
+    },
+    "blueblood_tgids": [
+      "bama",
+      "osu",
+      "michigan",
+      "texas",
+      "notre_dame",
+      "georgia",
+      "clemson",
+      "usc"
+    ]
   },
   "ap": {
     "undefeated_non_power_boost": 6.0

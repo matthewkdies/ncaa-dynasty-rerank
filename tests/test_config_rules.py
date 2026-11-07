@@ -127,3 +127,54 @@ def test_invalid_json_raises(tmp_path: Path):
     bad_file.write_text("{not valid json")
     with pytest.raises(ValueError):
         load_ranking_config(bad_file)
+
+
+def test_alias_resolution_in_rules(tmp_path: Path):
+    rules_file = tmp_path / "alias_rules.json"
+    rules_file.write_text(
+        """
+        {
+          "resume": {
+            "conference_weights": {
+              "sec": 1.25,
+              "big10": 1.20,
+              "acc": 1.10
+            },
+            "power_conference_ids": ["sec", "big10", "b12", "acc", "pac12"],
+            "blueblood_tgids": ["osu", "bama", "michigan", "wvu"]
+          }
+        }
+        """
+    )
+    cfg = load_ranking_config(rules_file)
+
+    # SEC=11, Big10=1, ACC=0
+    assert cfg.resume.conference_weights[11] == 1.25
+    assert cfg.resume.conference_weights[1] == 1.20
+    assert cfg.resume.conference_weights[0] == 1.10
+
+    # Power conf IDs: {11, 1, 2, 0, 10}
+    assert cfg.resume.power_conference_ids == {0, 1, 2, 10, 11}
+
+    # Blueblood TGIDs: osu=70, bama=3, michigan=51, wvu=126
+    assert cfg.resume.blueblood_tgids == {70, 3, 51, 126}
+
+
+def test_invalid_alias_raises(tmp_path: Path):
+    rules_file = tmp_path / "invalid_alias.json"
+    rules_file.write_text('{"resume": {"blueblood_tgids": ["fake_nonexistent_school"]}}')
+    with pytest.raises(ValueError, match="Unknown team alias"):
+        load_ranking_config(rules_file)
+
+
+def test_get_all_rules_metadata():
+    from ncaa_dynasty_rerank.config_rules import get_all_rules_metadata
+
+    metadata = get_all_rules_metadata()
+    assert len(metadata) > 20
+    names = {m["name"] for m in metadata}
+    assert "margin_cap" in names
+    assert "undefeated_non_power_boost" in names
+    assert "blueblood_bonus" in names
+    for m in metadata:
+        assert m["description"] != "No description provided."

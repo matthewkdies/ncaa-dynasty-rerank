@@ -14,7 +14,11 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from ncaa_dynasty_rerank.config import ConfigManager
-from ncaa_dynasty_rerank.config_rules import export_default_ranking_config, load_ranking_config
+from ncaa_dynasty_rerank.config_rules import (
+    export_default_ranking_config,
+    get_all_rules_metadata,
+    load_ranking_config,
+)
 from ncaa_dynasty_rerank.discover import find_dynasty_saves
 from ncaa_dynasty_rerank.engine import RankingEngine
 from ncaa_dynasty_rerank.models import GameRecord, PollRanking, TeamRecord
@@ -189,6 +193,36 @@ def handle_rules_commands(args: argparse.Namespace, cfg: ConfigManager) -> int:
             console.print(f"[red]Error validating ranking rules:[/red] {e}")
             return 1
 
+    elif sub == "describe":
+        all_rules = get_all_rules_metadata()
+        query = args.parameter.strip().lower() if args.parameter else ""
+        if query:
+            filtered = [
+                r
+                for r in all_rules
+                if query in r["name"].lower() or query in r["section"].lower() or query in r["full_name"].lower()
+            ]
+            if not filtered:
+                console.print(f"[yellow]No rules found matching query '[bold]{query}[/bold]'.[/yellow]")
+                return 0
+        else:
+            filtered = all_rules
+
+        table = Table(title="[bold gold1]Ranking Engine & Poll Rule Descriptions[/bold gold1]", box=box.ROUNDED)
+        table.add_column("Rule Name", style="bold cyan", width=34)
+        table.add_column("Section", style="magenta", width=10)
+        table.add_column("Default", justify="right", style="green", width=12)
+        table.add_column("Description", style="white")
+
+        for r in filtered:
+            val_str = str(r["default"])
+            if isinstance(r["default"], (set, dict)):
+                val_str = f"({len(r['default'])} items)"
+            table.add_row(r["name"], r["section"], val_str, r["description"])
+
+        console.print(table)
+        return 0
+
     elif sub == "show":
         try:
             if getattr(args, "defaults", False):
@@ -200,6 +234,25 @@ def handle_rules_commands(args: argparse.Namespace, cfg: ConfigManager) -> int:
                     console.print(f"[dim]Displaying active rules from: {active_path}[/dim]")
                 else:
                     console.print("[dim]Displaying active rules (using built-in defaults; no rules.json found):[/dim]")
+
+            if getattr(args, "descriptions", False):
+                all_rules = get_all_rules_metadata()
+                table = Table(title="[bold gold1]Active Ranking Rules & Descriptions[/bold gold1]", box=box.ROUNDED)
+                table.add_column("Rule Name", style="bold cyan", width=34)
+                table.add_column("Section", style="magenta", width=10)
+                table.add_column("Active Value", justify="right", style="green", width=12)
+                table.add_column("Description", style="white")
+
+                for r in all_rules:
+                    sec_obj = getattr(config, r["section"])
+                    active_val = getattr(sec_obj, r["name"])
+                    val_str = str(active_val)
+                    if isinstance(active_val, (set, dict)):
+                        val_str = f"({len(active_val)} items)"
+                    table.add_row(r["name"], r["section"], val_str, r["description"])
+
+                console.print(table)
+                return 0
 
             json_str = config.model_dump_json(indent=2)
             syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
@@ -273,6 +326,12 @@ def main() -> int:
     show_parser.add_argument(
         "--defaults", action="store_true", help="Show built-in default rules instead of active overrides"
     )
+    show_parser.add_argument(
+        "-d", "--descriptions", action="store_true", help="Display tabular view with parameter descriptions"
+    )
+
+    desc_parser = rules_sub.add_parser("describe", help="Display descriptions and defaults for ranking calculation rules")
+    desc_parser.add_argument("parameter", nargs="?", help="Optional parameter or section name to filter by")
 
     validate_parser = rules_sub.add_parser("validate", help="Validate a rules JSON file")
     validate_parser.add_argument(

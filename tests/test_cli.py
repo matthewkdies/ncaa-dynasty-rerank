@@ -151,6 +151,22 @@ def test_cli_rules_subcommands(tmp_path):
         with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "validate", str(bad_file)]):
             assert main() == 1
 
+        # 7. rules show --descriptions
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "show", "-d"]):
+            assert main() == 0
+
+        # 8. rules describe all
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "describe"]):
+            assert main() == 0
+
+        # 9. rules describe filter
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "describe", "margin"]):
+            assert main() == 0
+
+        # 10. rules describe query with no match
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "describe", "nonexistentquery123"]):
+            assert main() == 0
+
 
 def test_cli_rerank_with_rules_flag(tmp_path):
     save_path = tmp_path / "USR-DATA"

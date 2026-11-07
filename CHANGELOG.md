@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-07
+
+### Added
+- Extracted all resume calculation variables, SOS coefficients, and game valuation weights into a configurable EngineConfig model.
+- Parameterized AP and Coaches poll strategies with dedicated configuration models controlling points curves, voter counts, Cinderella boosts, win volume bonuses, poll inertia anchors, and blueblood pedigree bonuses.
+- Implemented recursive deep-merge configuration loading that allows users to provide partial overrides while preserving default ranking dynamics.
+- Added support for friendly team and conference aliases (such as "sec", "big10", "bama", and "osu") in rules configuration files instead of requiring raw numeric IDs.
+- Added comprehensive parameter descriptions across all configuration models and exposed them through a new `rules describe` CLI subcommand.
+- Added a `--descriptions` option to `rules show` to display active ranking rules alongside their functional descriptions in a formatted table.
+- Added CLI `--rules` (`-r`) flag to allow running re-ranking passes with custom rules files.
+- Added `rules export`, `rules validate`, and `rules path` subcommands for managing user configuration files.
+
 ## [0.1.1] - 2026-11-07
 
 ### Added
