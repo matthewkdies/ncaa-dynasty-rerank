@@ -20,7 +20,7 @@ class ConfigManager:
         if not self.config_path.exists():
             return {"default_alias": None, "aliases": {}}
         try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             return {"default_alias": None, "aliases": {}}
