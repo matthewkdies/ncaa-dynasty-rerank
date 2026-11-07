@@ -1,5 +1,6 @@
 """Registry for discovering and managing poll ranking strategies."""
 
+from ncaa_dynasty_rerank.config_rules import RankingConfig
 from ncaa_dynasty_rerank.strategies.ap import APPollStrategy
 from ncaa_dynasty_rerank.strategies.base import PollStrategy
 from ncaa_dynasty_rerank.strategies.cfp import CFPPollStrategy
@@ -9,14 +10,15 @@ from ncaa_dynasty_rerank.strategies.coaches import CoachesPollStrategy
 class PollRegistry:
     """Manages available poll strategies, allowing custom models to be registered."""
 
-    def __init__(self):
+    def __init__(self, config: RankingConfig | None = None):
+        self.config = config or RankingConfig()
         self._strategies: dict[str, PollStrategy] = {}
         self.register_default_strategies()
 
     def register_default_strategies(self) -> None:
-        self.register(CFPPollStrategy())
-        self.register(APPollStrategy())
-        self.register(CoachesPollStrategy())
+        self.register(CFPPollStrategy(config=self.config.cfp))
+        self.register(APPollStrategy(config=self.config.ap))
+        self.register(CoachesPollStrategy(config=self.config.coaches))
 
     def register(self, strategy: PollStrategy) -> None:
         self._strategies[strategy.poll_type] = strategy
