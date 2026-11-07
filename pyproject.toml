@@ -4,29 +4,22 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ncaa-dynasty-rerank"
-version = "0.1.0"
+version = "0.1.1"
 description = "Automated CFP, AP, and Coaches poll re-ranking engine for NCAA Football 14 dynasty saves."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [
-    { name = "Matthew Dies" }
-]
+authors = [{ name = "Matthew Dies" }]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Games/Entertainment :: Simulation",
 ]
-dependencies = [
-    "rich>=13.0.0",
-    "pydantic>=2.0.0",
-]
+dependencies = ["rich>=13.0.0", "pydantic>=2.0.0"]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-]
+dev = ["pytest>=7.0.0"]
 
 [project.scripts]
 ncaa-dynasty-rerank = "ncaa_dynasty_rerank.cli:main"
@@ -44,13 +37,13 @@ line-length = 120
 
 [tool.ruff.lint]
 select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "B",    # flake8-bugbear
-    "UP",   # pyupgrade
-    "SIM",  # flake8-simplify
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
 ]
 ignore = [
     "E501", # line too long (handled by ruff format)
