@@ -113,3 +113,59 @@ def test_cli_guards_inactive_cfp_poll(tmp_path):
     # But Coaches and AP polls are active and updated
     assert loaded_teams[1]["coaches_rank"] == 1
     assert loaded_teams[2]["coaches_rank"] == 2
+
+
+def test_cli_rules_subcommands(tmp_path):
+    with patch("ncaa_dynasty_rerank.cli.ConfigManager") as mock_cfg_class:
+        from ncaa_dynasty_rerank.config import ConfigManager
+
+        real_cfg = ConfigManager(tmp_path / "cfg")
+        mock_cfg_class.return_value = real_cfg
+
+        # 1. rules path
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "path"]):
+            assert main() == 0
+
+        # 2. rules export default location
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "export"]):
+            assert main() == 0
+            assert real_cfg.get_default_rules_path().exists()
+
+        # 3. rules export custom location
+        dest = tmp_path / "custom_export.json"
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "export", str(dest)]):
+            assert main() == 0
+            assert dest.exists()
+
+        # 4. rules show
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "show"]):
+            assert main() == 0
+
+        # 5. rules validate valid file
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "validate", str(dest)]):
+            assert main() == 0
+
+        # 6. rules validate invalid json
+        bad_file = tmp_path / "bad.json"
+        bad_file.write_text("{bad json")
+        with patch("sys.argv", ["ncaa-dynasty-rerank", "rules", "validate", str(bad_file)]):
+            assert main() == 1
+
+
+def test_cli_rerank_with_rules_flag(tmp_path):
+    save_path = tmp_path / "USR-DATA"
+    rules_path = tmp_path / "rules.json"
+    rules_path.write_text('{"resume": {"margin_cap": 30}}')
+
+    teams = [
+        {"tgid": 1, "name": "TeamA", "mascot": "MascotA", "conf_id": 11, "wins": 8, "losses": 0, "cfp_rank": 1},
+        {"tgid": 2, "name": "TeamB", "mascot": "MascotB", "conf_id": 1, "wins": 7, "losses": 1, "cfp_rank": 2},
+    ]
+    games = [{"away_tgid": 2, "home_tgid": 1, "away_score": 14, "home_score": 28, "week": 1, "status": 2}]
+    create_synthetic_save(save_path, teams, games)
+
+    with patch(
+        "sys.argv",
+        ["ncaa-dynasty-rerank", "--save-path", str(save_path), "--rules", str(rules_path), "--dry-run"],
+    ):
+        assert main() == 0

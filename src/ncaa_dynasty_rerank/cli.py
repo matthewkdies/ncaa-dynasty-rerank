@@ -10,9 +10,11 @@ from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
+from rich.syntax import Syntax
 from rich.table import Table
 
 from ncaa_dynasty_rerank.config import ConfigManager
+from ncaa_dynasty_rerank.config_rules import export_default_ranking_config, load_ranking_config
 from ncaa_dynasty_rerank.discover import find_dynasty_saves
 from ncaa_dynasty_rerank.engine import RankingEngine
 from ncaa_dynasty_rerank.models import GameRecord, PollRanking, TeamRecord
@@ -159,6 +161,57 @@ def handle_alias_commands(args: argparse.Namespace, cfg: ConfigManager) -> int:
     return 0
 
 
+def handle_rules_commands(args: argparse.Namespace, cfg: ConfigManager) -> int:
+    """Dispatches ranking rules management subcommands."""
+    sub = args.rules_action
+
+    if sub == "path":
+        console.print(str(cfg.get_default_rules_path()))
+        return 0
+
+    elif sub == "export":
+        dest = args.destination or cfg.get_default_rules_path()
+        try:
+            exported_path = export_default_ranking_config(dest)
+            console.print(f"[green]✓ Exported default ranking rules to:[/green] {exported_path}")
+            return 0
+        except OSError as e:
+            console.print(f"[red]Error exporting ranking rules:[/red] {e}")
+            return 1
+
+    elif sub == "validate":
+        target = Path(args.path).expanduser().resolve() if args.path else cfg.get_default_rules_path()
+        try:
+            load_ranking_config(target)
+            console.print(f"[green]✓ Ranking rules file is valid:[/green] {target}")
+            return 0
+        except (ValueError, FileNotFoundError, OSError) as e:
+            console.print(f"[red]Error validating ranking rules:[/red] {e}")
+            return 1
+
+    elif sub == "show":
+        try:
+            if getattr(args, "defaults", False):
+                config = load_ranking_config(None)
+                console.print("[dim]Displaying built-in default ranking rules:[/dim]")
+            else:
+                config, active_path = cfg.load_rules()
+                if active_path:
+                    console.print(f"[dim]Displaying active rules from: {active_path}[/dim]")
+                else:
+                    console.print("[dim]Displaying active rules (using built-in defaults; no rules.json found):[/dim]")
+
+            json_str = config.model_dump_json(indent=2)
+            syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
+            console.print(syntax)
+            return 0
+        except (ValueError, FileNotFoundError, OSError) as e:
+            console.print(f"[red]Error reading rules:[/red] {e}")
+            return 1
+
+    return 0
+
+
 def create_backup(save_path: Path) -> Path:
     """Creates a timestamped backup before modifying the save file."""
     timestamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
@@ -175,6 +228,7 @@ def main() -> int:
     )
     parser.add_argument("-d", "--dynasty", help="Dynasty alias name to use (configured via 'alias' command)")
     parser.add_argument("-s", "--save-path", help="Direct path to save directory or USR-DATA file")
+    parser.add_argument("-r", "--rules", help="Path to custom ranking rules JSON file")
     parser.add_argument(
         "--dry-run", action="store_true", help="Preview proposed rankings without modifying the save file"
     )
@@ -204,13 +258,42 @@ def main() -> int:
     alias_sub.add_parser("scan", help="Scan system for dynasty saves and prompt to map them")
     alias_sub.add_parser("discover", help="Alias for scan")
 
+    # rules subcommand
+    rules_parser = subparsers.add_parser("rules", help="Manage and inspect ranking calculation rules")
+    rules_sub = rules_parser.add_subparsers(dest="rules_action", required=True)
+
+    rules_sub.add_parser("path", help="Print default rules file path")
+
+    export_parser = rules_sub.add_parser("export", help="Export default rules JSON")
+    export_parser.add_argument(
+        "destination", nargs="?", help="Output path (defaults to ~/.config/ncaa-dynasty-rerank/rules.json)"
+    )
+
+    show_parser = rules_sub.add_parser("show", help="Display current active rules")
+    show_parser.add_argument(
+        "--defaults", action="store_true", help="Show built-in default rules instead of active overrides"
+    )
+
+    validate_parser = rules_sub.add_parser("validate", help="Validate a rules JSON file")
+    validate_parser.add_argument(
+        "path", nargs="?", help="Path to rules file to validate (defaults to ~/.config/ncaa-dynasty-rerank/rules.json)"
+    )
+
     args = parser.parse_args()
     cfg = ConfigManager()
 
     if args.subcommand == "alias":
         return handle_alias_commands(args, cfg)
 
+    if args.subcommand == "rules":
+        return handle_rules_commands(args, cfg)
+
     # Re-ranking flow
+    try:
+        ranking_config, active_rules_path = cfg.load_rules(args.rules)
+    except (ValueError, FileNotFoundError, OSError) as e:
+        console.print(f"[red]Error loading ranking rules:[/red] {e}")
+        return 1
     try:
         if args.save_path:
             save_path = Path(args.save_path).expanduser().resolve()
@@ -245,10 +328,12 @@ def main() -> int:
     console.print(
         f"Loaded [bold cyan]{len(teams)}[/bold cyan] teams and [bold cyan]{len(games)}[/bold cyan] completed games."
     )
+    if active_rules_path:
+        console.print(f"[dim]Applying custom ranking rules from: {active_rules_path}[/dim]")
 
     # Run engine & generate polls
-    engine = RankingEngine(teams, games)
-    poll_gen = PollGenerator(engine)
+    engine = RankingEngine(teams, games, config=ranking_config)
+    poll_gen = PollGenerator(engine, config=ranking_config)
     cfp_poll, ap_poll, coaches_poll = poll_gen.generate_all()
 
     cfp_active = any(t.cfp_rank > 0 for t in teams)
