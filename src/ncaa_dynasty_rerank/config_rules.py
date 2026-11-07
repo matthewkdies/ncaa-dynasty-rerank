@@ -200,11 +200,9 @@ def load_ranking_config(path: Path | str | None = None) -> RankingConfig:
     # Check if this is a flat legacy resume config (keys like 'margin_cap' at top-level)
     top_keys = set(raw_overrides.keys())
     sub_sections = {"resume", "ap", "coaches", "cfp"}
-    if not top_keys.intersection(sub_sections):
-        # All keys belong to resume directly
-        normalized_overrides = {"resume": raw_overrides}
-    else:
-        normalized_overrides = raw_overrides
+    normalized_overrides = (
+        {"resume": raw_overrides} if not top_keys.intersection(sub_sections) else raw_overrides
+    )
 
     merged = deep_merge(default_dict, normalized_overrides)
     return RankingConfig.model_validate(merged)

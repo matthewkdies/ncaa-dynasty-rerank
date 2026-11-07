@@ -117,21 +117,80 @@ Apply these rankings to your save file? [y/N]: y
 
 ---
 
+## Customizing Ranking Rules
+
+You can customize any variable controlling how the resume engine and polls are calculated using a JSON configuration file. Default settings reflect authentic college football dynamics, but you can override any parameter.
+
+### Managing Rules via CLI
+
+```bash
+# Export the complete default rules to ~/.config/ncaa-dynasty-rerank/rules.json
+ncaa-dynasty-rerank rules export
+
+# Export default rules to a custom location
+ncaa-dynasty-rerank rules export my_rules.json
+
+# Display currently active rules in the terminal
+ncaa-dynasty-rerank rules show
+
+# Validate a custom rules file
+ncaa-dynasty-rerank rules validate my_rules.json
+
+# Print path to default user rules file
+ncaa-dynasty-rerank rules path
+```
+
+### Partial Overrides (Deep Merging)
+
+You do **not** need to copy the entire configuration file to change a few settings. Any JSON file specified in `~/.config/ncaa-dynasty-rerank/rules.json` or passed via `--rules` is recursively deep-merged on top of defaults.
+
+For example, to boost Group of 5 undefeated teams in the AP poll, increase the margin cap, and tweak the SEC conference weight, create a `rules.json`:
+
+```json
+{
+  "resume": {
+    "margin_cap": 35,
+    "conference_weights": {
+      "11": 1.25
+    }
+  },
+  "ap": {
+    "undefeated_non_power_boost": 6.0
+  },
+  "coaches": {
+    "prior_rank_anchor_weight": 0.80,
+    "blueblood_bonus": 3.0
+  }
+}
+```
+
+Then run with your custom rules:
+
+```bash
+ncaa-dynasty-rerank -d wvu --rules my_rules.json
+```
+
+---
+
 ## Configuration & Extensibility
 
-If you want to tweak conference weights, adjust margin caps, or add custom polls, you can! The library uses the [Strategy Pattern](https://en.wikipedia.org/wiki/Strategy_pattern):
+If you want to tweak parameters programmatically or add custom polls, you can use `RankingConfig` and the [Strategy Pattern](https://en.wikipedia.org/wiki/Strategy_pattern):
 
 ```python
-from ncaa_dynasty_rerank.config_rules import EngineConfig
+from ncaa_dynasty_rerank.config_rules import RankingConfig
 from ncaa_dynasty_rerank.engine import RankingEngine
+from ncaa_dynasty_rerank.polls import PollGenerator
 from ncaa_dynasty_rerank.strategies.base import PollStrategy
 from ncaa_dynasty_rerank.strategies.registry import PollRegistry
 
-# Custom conference weights or margin caps
-config = EngineConfig(
-    conference_weights={11: 1.20, 1: 1.20, 0: 1.05},  # Boost SEC & Big Ten
-    margin_cap=21,
-)
+# Customize rules programmatically
+config = RankingConfig()
+config.resume.margin_cap = 28
+config.ap.undefeated_non_power_boost = 5.0
+
+engine = RankingEngine(teams, games, config=config)
+generator = PollGenerator(engine, config=config)
+cfp, ap, coaches = generator.generate_all()
 
 
 # Custom poll rating model (e.g. SP+ or /r/CFB poll)
@@ -144,12 +203,9 @@ class RedditCFBPoll(PollStrategy):
         return ...
 
 
-registry = PollRegistry()
+registry = PollRegistry(config=config)
 registry.register(RedditCFBPoll())
 ```
-
-> [!note]
-> I have future plans to make this all more configurable, both at the CLI level and at the user-level. Eventually, I want to support preferences being saved to a config file, which is loaded at runtime. But... later.
 
 ---
 

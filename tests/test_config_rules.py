@@ -1,6 +1,6 @@
 from pathlib import Path
+
 import pytest
-from pydantic import ValidationError
 
 from ncaa_dynasty_rerank.config_rules import (
     APPollConfig,
