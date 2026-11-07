@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-07
+
+### Fixed
+
+- Fixed game crash caused by duplicate TGID entries in NCAA 14 `TEAM` tables (specifically South Alabama's transition slot at record index 131 overwriting index 88). `TDBFile` now strictly restricts poll loading and updates to active FBS records (`0..125`, excluding FCS conference 17 and High School conference 24), guaranteeing an exact bijection of ranks `1..126` with no missing or duplicate ranks.
+
+
 ## [0.1.0] - 2026-11-07
 
 ### Added

@@ -158,7 +158,7 @@ class TDBFile:
                 )
 
     def get_teams(self) -> list[dict[str, Any]]:
-        """Returns all populated teams from the TEAM table."""
+        """Returns all populated FBS teams from the TEAM table."""
         if "TEAM" not in self.tables:
             return []
 
@@ -169,7 +169,17 @@ class TDBFile:
         tdna_def = fields.get("TDNA")
         tmna_def = fields.get("TMNA")
 
-        for r_idx in range(team_table.header.max_records):
+        def read_val(rec_bv: BitView, key: str, default: int = 0) -> int:
+            if key in fields:
+                return rec_bv.get_bits(fields[key].offset, fields[key].bits)
+            return default
+
+        seen_tgids: set[int] = set()
+        # In NCAA Football 14, records 0..125 are the active 126 FBS teams.
+        # Records 126+ are FCS teams (conf 17), duplicate transition slots, and high school teams (conf 24).
+        max_fbs_records = min(126, team_table.header.max_records)
+
+        for r_idx in range(max_fbs_records):
             bv = team_table.get_record_bitview(r_idx)
             tgid = bv.get_bits(fields["TGID"].offset, fields["TGID"].bits)
             toid = bv.get_bits(fields["TOID"].offset, fields["TOID"].bits)
@@ -178,13 +188,14 @@ class TDBFile:
             if tgid == 0 or tgid != toid:
                 continue
 
+            conf_id = read_val(bv, "CGID")
+            # Filter out non-FBS conferences (FCS=17, High School=24) and duplicate entries
+            if conf_id in (17, 24) or tgid in seen_tgids:
+                continue
+
+            seen_tgids.add(tgid)
             name = bv.get_string(tdna_def.offset, tdna_def.bits) if tdna_def else ""
             mascot = bv.get_string(tmna_def.offset, tmna_def.bits) if tmna_def else ""
-
-            def read_val(rec_bv: BitView, key: str, default: int = 0) -> int:
-                if key in fields:
-                    return rec_bv.get_bits(fields[key].offset, fields[key].bits)
-                return default
 
             teams.append(
                 {
@@ -193,7 +204,7 @@ class TDBFile:
                     "name": name,
                     "mascot": mascot,
                     "full_name": f"{name} {mascot}".strip(),
-                    "conf_id": read_val(bv, "CGID"),
+                    "conf_id": conf_id,
                     "div_id": read_val(bv, "DGID"),
                     "wins": read_val(bv, "TSWI"),
                     "losses": read_val(bv, "TSLO"),
@@ -275,11 +286,14 @@ class TDBFile:
         }
 
         tgid_to_record_idx: dict[int, int] = {}
-        for r_idx in range(team_table.header.max_records):
+        # Restrict mapping strictly to FBS records (0..125) and filter non-FBS / duplicate slots
+        max_fbs_records = min(126, team_table.header.max_records)
+        for r_idx in range(max_fbs_records):
             bv = team_table.get_record_bitview(r_idx)
             tgid = bv.get_bits(fields["TGID"].offset, fields["TGID"].bits)
             toid = bv.get_bits(fields["TOID"].offset, fields["TOID"].bits)
-            if tgid > 0 and tgid == toid:
+            conf_id = bv.get_bits(fields["CGID"].offset, fields["CGID"].bits) if "CGID" in fields else 0
+            if tgid > 0 and tgid == toid and conf_id not in (17, 24) and tgid not in tgid_to_record_idx:
                 tgid_to_record_idx[tgid] = r_idx
 
         for update in team_updates:

@@ -77,3 +77,38 @@ def test_synthetic_tdb_update_and_save(synthetic_save):
     clemson = next(t for t in teams if t["tgid"] == 1)
     assert clemson["ap_rank"] == 1
     assert clemson["ap_points"] == 1550
+
+
+def test_tdb_duplicate_tgid_and_non_fbs_filtering(tmp_path):
+    save_path = tmp_path / "USR-DATA"
+    teams = [
+        {"tgid": 1, "name": "TeamA", "conf_id": 0, "wins": 8, "losses": 0, "cfp_rank": 1},
+        {"tgid": 235, "name": "South Alabama", "conf_id": 13, "wins": 2, "losses": 4, "cfp_rank": 107},
+        {"tgid": 160, "name": "FCS East", "conf_id": 17, "wins": 0, "losses": 0, "cfp_rank": 0},
+        {"tgid": 235, "name": "South Alabama", "conf_id": 13, "wins": 0, "losses": 0, "cfp_rank": 0},
+        {"tgid": 610, "name": "User HS team", "conf_id": 24, "wins": 0, "losses": 0, "cfp_rank": 0},
+    ]
+    create_synthetic_save(save_path, teams, [])
+
+    tdb = TDBFile(save_path)
+    loaded_teams = tdb.get_teams()
+
+    # Must only load FBS teams, skipping FCS, HS, and duplicate TGIDs
+    assert len(loaded_teams) == 2
+    assert [t["tgid"] for t in loaded_teams] == [1, 235]
+    assert loaded_teams[1]["record_index"] == 1
+
+    # Updating polls must update record 1 (real FBS team), NOT record 3 (duplicate non-FBS)
+    tdb.update_team_polls([{"tgid": 235, "cfp_rank": 77}])
+    tdb.save()
+
+    reloaded = TDBFile(save_path)
+    rec1_bv = reloaded.tables["TEAM"].get_record_bitview(1)
+    rec3_bv = reloaded.tables["TEAM"].get_record_bitview(3)
+
+    tbrk_def = reloaded.tables["TEAM"].fields["TBRK"]
+    rec1_rank = rec1_bv.get_bits(tbrk_def.offset, tbrk_def.bits)
+    rec3_rank = rec3_bv.get_bits(tbrk_def.offset, tbrk_def.bits)
+
+    assert rec1_rank == 77
+    assert rec3_rank == 0
