@@ -46,3 +46,30 @@ def test_discover_saves(tmp_path):
     assert found[0].folder_name == "BLUS31159-DYNASTY-DEFAULT"
     assert found[0].is_aliased is False
     assert found[0].last_modified.tzinfo is not None
+
+
+def test_config_manager_rules_resolution(tmp_path):
+    cfg_dir = tmp_path / "config"
+    cfg = ConfigManager(cfg_dir)
+
+    # 1. No rules.json file exists -> returns defaults, active_path is None
+    rules, active_path = cfg.load_rules()
+    assert active_path is None
+    assert rules.resume.margin_cap == 24
+
+    # 2. Write custom rules.json to config_dir
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    rules_file = cfg.get_default_rules_path()
+    rules_file.write_text('{"resume": {"margin_cap": 32}}')
+
+    rules, active_path = cfg.load_rules()
+    assert active_path == rules_file
+    assert rules.resume.margin_cap == 32
+
+    # 3. Explicit custom path takes precedence over default rules.json
+    custom_file = tmp_path / "other_rules.json"
+    custom_file.write_text('{"resume": {"margin_cap": 40}}')
+
+    rules, active_path = cfg.load_rules(custom_file)
+    assert active_path == custom_file.resolve()
+    assert rules.resume.margin_cap == 40

@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ncaa_dynasty_rerank.config_rules import RankingConfig, load_ranking_config
+
 
 class ConfigManager:
     """Manages persistent dynasty save aliases in ~/.config/ncaa-dynasty-rerank/config.json."""
@@ -14,7 +16,23 @@ class ConfigManager:
         else:
             self.config_dir = Path(config_dir)
         self.config_path = self.config_dir / "config.json"
+        self.rules_path = self.config_dir / "rules.json"
         self._config: dict[str, Any] = self._load()
+
+    def get_default_rules_path(self) -> Path:
+        """Returns the default rules file path in the config directory."""
+        return self.rules_path
+
+    def load_rules(self, custom_path: Path | str | None = None) -> tuple[RankingConfig, Path | None]:
+        """Loads RankingConfig from custom path, or default rules.json if present, or defaults."""
+        if custom_path:
+            p = Path(custom_path).expanduser().resolve()
+            return load_ranking_config(p), p
+
+        if self.rules_path.exists():
+            return load_ranking_config(self.rules_path), self.rules_path
+
+        return load_ranking_config(None), None
 
     def _load(self) -> dict[str, Any]:
         if not self.config_path.exists():
