@@ -293,3 +293,61 @@ def test_head_to_head_cycle_safety():
     adjusted = engine.apply_head_to_head_adjustments([a, b, c])
     assert len(adjusted) == 3
     assert {t.tgid for t in adjusted} == {1, 2, 3}
+
+
+def test_ranking_config_acceptance_and_custom_variables():
+    from ncaa_dynasty_rerank.config_rules import RankingConfig
+
+    # 1. Custom unplayed baseline
+    custom_cfg = RankingConfig()
+    custom_cfg.resume.unplayed_base = 75.0
+    custom_cfg.resume.unplayed_win_bonus = 20.0
+
+    t1 = make_team(1, "PreseasonCustom", 11, 2, 0)
+    engine = RankingEngine([t1], [], config=custom_cfg)
+    engine.evaluate_resumes()
+    # Base 75.0 + 2*20.0 = 115.0
+    assert t1.resume_score == 115.0
+
+    # 2. Custom conference modifier weights
+    conf_cfg = EngineConfig(conf_base_weight=0.50, conf_non_con_weight=0.50)
+    t_sec = make_team(1, "SECTeam", 11, 1, 0)
+    t_mwc = make_team(2, "MWCTeam", 9, 0, 1)
+    g1 = GameRecord(
+        record_index=1,
+        week=1,
+        away_tgid=2,
+        home_tgid=1,
+        away_score=0,
+        home_score=10,
+        winner_tgid=1,
+        loser_tgid=2,
+        margin=10,
+    )
+    engine_conf = RankingEngine([t_sec, t_mwc], [g1], config=conf_cfg)
+    mods = engine_conf.calculate_conference_modifiers()
+    # SEC (11): base 1.15 * 0.50 + (0.75 + 1.0 * 0.5) * 0.50 = 0.575 + 0.625 = 1.20
+    assert round(mods[11], 3) == 1.200
+
+    # 3. Custom quality win cap
+    cap_cfg = EngineConfig(fcs_or_bad_team_quality_cap=2.0)
+    t_win = make_team(1, "Winner", 11, 1, 0)
+    t_fcs = make_team(2, "FCSOpp", 17, 0, 1)
+    g_fcs = GameRecord(
+        record_index=1,
+        week=1,
+        away_tgid=2,
+        home_tgid=1,
+        away_score=0,
+        home_score=40,
+        winner_tgid=1,
+        loser_tgid=2,
+        margin=40,
+    )
+    engine_cap = RankingEngine([t_win, t_fcs], [g_fcs], config=cap_cfg)
+    val = engine_cap.calculate_game_value(1, g_fcs, {2: 0.50}, {17: 0.50})
+    # Default calculated quality is (0*14 + 0.5*10)*0.5 = 2.5
+    # Cap of 2.0 caps it at 2.0 (diff of 0.5 vs default 2.5)
+    default_engine = RankingEngine([t_win, t_fcs], [g_fcs])
+    val_default = default_engine.calculate_game_value(1, g_fcs, {2: 0.50}, {17: 0.50})
+    assert round(val_default - val, 2) == 0.50

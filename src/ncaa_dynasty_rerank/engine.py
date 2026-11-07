@@ -2,7 +2,7 @@
 
 import math
 
-from ncaa_dynasty_rerank.config_rules import EngineConfig
+from ncaa_dynasty_rerank.config_rules import EngineConfig, RankingConfig
 from ncaa_dynasty_rerank.models import GameRecord, TeamRecord
 
 
@@ -13,9 +13,15 @@ class RankingEngine:
         self,
         teams: list[TeamRecord],
         games: list[GameRecord],
-        config: EngineConfig | None = None,
+        config: EngineConfig | RankingConfig | None = None,
     ):
-        self.config = config or EngineConfig()
+        if config is None:
+            self.config = EngineConfig()
+        elif isinstance(config, RankingConfig):
+            self.config = config.resume
+        else:
+            self.config = config
+
         self.teams_by_tgid: dict[int, TeamRecord] = {t.tgid: t for t in teams}
         self.games = games
         self._populate_game_history()
@@ -60,7 +66,11 @@ class RankingEngine:
             results = conf_games.get(cid, [])
             if results:
                 non_con_pct = sum(results) / len(results)
-                modifiers[cid] = base * 0.70 + (0.75 + non_con_pct * 0.5) * 0.30
+                modifiers[cid] = (
+                    base * self.config.conf_base_weight
+                    + (self.config.conf_non_con_baseline + non_con_pct * self.config.conf_non_con_multiplier)
+                    * self.config.conf_non_con_weight
+                )
             else:
                 modifiers[cid] = base
         return modifiers
@@ -70,7 +80,7 @@ class RankingEngine:
         owp: dict[int, float] = {}
         for tgid, team in self.teams_by_tgid.items():
             if not team.opponents:
-                owp[tgid] = 0.50
+                owp[tgid] = self.config.sos_default_owp
                 continue
 
             opp_win_pcts = []
@@ -82,19 +92,22 @@ class RankingEngine:
                     adjusted_games = max(1, opp.games_played - 1)
                     opp_win_pcts.append((adjusted_wins / adjusted_games) * conf_weight)
                 else:
-                    opp_win_pcts.append(0.30)
+                    opp_win_pcts.append(self.config.sos_default_opp_win_pct)
 
             owp[tgid] = sum(opp_win_pcts) / len(opp_win_pcts)
 
         sos: dict[int, float] = {}
+        total_sos_weights = self.config.sos_owp_weight + self.config.sos_oowp_weight
         for tgid, team in self.teams_by_tgid.items():
             if not team.opponents:
-                sos[tgid] = owp.get(tgid, 0.50)
+                sos[tgid] = owp.get(tgid, self.config.sos_default_owp)
                 continue
 
-            oowp_vals = [owp.get(opp_id, 0.50) for opp_id in team.opponents]
+            oowp_vals = [owp.get(opp_id, self.config.sos_default_owp) for opp_id in team.opponents]
             oowp = sum(oowp_vals) / len(oowp_vals)
-            composite_sos = (owp[tgid] * 2.0 + oowp) / 3.0
+            composite_sos = (
+                owp[tgid] * self.config.sos_owp_weight + oowp * self.config.sos_oowp_weight
+            ) / total_sos_weights
             sos[tgid] = composite_sos
             team.sos_score = composite_sos
 
@@ -115,7 +128,7 @@ class RankingEngine:
         opp_conf = opp.conf_id if opp else 17
         conf_mod = conf_modifiers.get(opp_conf, self.config.default_conf_weight)
         opp_win_pct = opp.win_pct if opp else 0.25
-        opp_sos = sos_scores.get(opp_id, 0.50)
+        opp_sos = sos_scores.get(opp_id, self.config.sos_default_owp)
 
         # Margin diminishing returns
         eff_margin = min(self.config.margin_cap, game.margin)
@@ -127,16 +140,20 @@ class RankingEngine:
 
         if is_winner:
             base = self.config.win_base
-            quality = (opp_win_pct * 14.0 + opp_sos * 10.0) * conf_mod
-            if opp_conf in (17, 24) or opp_win_pct < 0.35:
-                quality = min(quality, 4.0)
+            quality = (
+                opp_win_pct * self.config.win_opp_win_pct_factor + opp_sos * self.config.win_opp_sos_factor
+            ) * conf_mod
+            if opp_conf in self.config.fcs_conference_ids or opp_win_pct < self.config.fcs_or_bad_team_win_pct_threshold:
+                quality = min(quality, self.config.fcs_or_bad_team_quality_cap)
 
             return base + quality + margin_factor + location_bonus
         else:
             base_loss = self.config.loss_base
-            loss_mitigation = (opp_win_pct * 8.0 + opp_sos * 6.0) * conf_mod
+            loss_mitigation = (
+                opp_win_pct * self.config.loss_opp_win_pct_factor + opp_sos * self.config.loss_opp_sos_factor
+            ) * conf_mod
             home_loss_penalty = -self.config.home_loss_penalty if not is_road else 0.0
-            margin_penalty = -margin_factor * 0.70
+            margin_penalty = -margin_factor * self.config.margin_penalty_multiplier
 
             return base_loss + loss_mitigation + margin_penalty + home_loss_penalty
 
@@ -146,13 +163,17 @@ class RankingEngine:
         sos_scores = self.calculate_sos(conf_modifiers)
 
         for tgid, team in self.teams_by_tgid.items():
-            if team.conf_id in (17, 24):
+            if team.conf_id in self.config.fcs_conference_ids:
                 team.resume_score = -999.0
                 continue
 
             team_games = [g for g in self.games if g.away_tgid == tgid or g.home_tgid == tgid]
             if not team_games:
-                team.resume_score = 50.0 + (team.wins * 10.0) - (team.losses * 15.0)
+                team.resume_score = (
+                    self.config.unplayed_base
+                    + (team.wins * self.config.unplayed_win_bonus)
+                    - (team.losses * self.config.unplayed_loss_penalty)
+                )
                 continue
 
             game_vals = [self.calculate_game_value(tgid, g, sos_scores, conf_modifiers) for g in team_games]
@@ -166,16 +187,20 @@ class RankingEngine:
             q_wins = sum(
                 1
                 for opp_id in team.wins_against
-                if self.teams_by_tgid.get(opp_id) and self.teams_by_tgid[opp_id].win_pct >= 0.50
+                if self.teams_by_tgid.get(opp_id)
+                and self.teams_by_tgid[opp_id].win_pct >= self.config.quality_win_min_win_pct
             )
             team.quality_wins = q_wins
             q_win_rate = q_wins / max(1, team.games_played)
 
-            loss_penalty = team.losses * 8.5
-            win_pct_component = (team.win_pct * 30.0) + 35.0 - loss_penalty
+            loss_penalty = team.losses * self.config.loss_penalty_multiplier
+            win_pct_component = (team.win_pct * self.config.win_pct_multiplier) + self.config.win_pct_base - loss_penalty
 
             resume_score = (
-                win_pct_component + (normalized_performance * 2.2) + (team.sos_score * 32.0) + (q_win_rate * 22.0)
+                win_pct_component
+                + (normalized_performance * self.config.performance_multiplier)
+                + (team.sos_score * self.config.sos_multiplier)
+                + (q_win_rate * self.config.quality_win_rate_multiplier)
             )
 
             team.resume_score = round(resume_score, 2)
@@ -188,7 +213,7 @@ class RankingEngine:
         n = len(ranked)
 
         # Bubble adjustments for adjacent teams
-        for _ in range(3):
+        for _ in range(self.config.h2h_max_iterations):
             changed = False
             for i in range(n - 1):
                 t1 = ranked[i]
