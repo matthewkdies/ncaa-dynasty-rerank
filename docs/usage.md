@@ -73,7 +73,7 @@ To re-rank by providing an explicit file or directory path:
 ncaa-dynasty-rerank -s /path/to/BLUS31159-DYNASTY-SAVE/USR-DATA
 ```
 
-### Dry Run (Preview Only)
+### Dry Run
 
 To evaluate rankings and view the terminal tables without modifying the save file:
 
@@ -98,9 +98,11 @@ When you run `ncaa-dynasty-rerank`, the program executes the following steps:
 1. **Loads the Save File**: Opens the uncompressed `USR-DATA` binary and reads table records (`TEAM` and `SCHD`).
 2. **Evaluates Resumes**: Evaluates game outcomes, opponent records, strength of schedule, and point differentials for all 126 active FBS teams.
 3. **Generates Polls**:
-   - CFP Rankings: Pure resume score order with head-to-head adjustments.
-   - AP Poll: Media model factoring in win volume, non-power undefeated bonuses, and authentic point curves.
-   - Coaches Poll: Includes poll inertia anchors based on prior rank and blueblood bonuses.
+
+      - CFP Rankings: Pure resume score order with head-to-head adjustments.
+      - AP Poll: Media model factoring in win volume, non-power undefeated bonuses, and authentic point curves.
+      - Coaches Poll: Includes poll inertia anchors based on prior rank and blueblood bonuses.
+
 4. **Checks Inactive Weeks**: If `TBRK` is zero across all teams (early-season weeks before the in-game BCS/CFP poll activates), the tool skips writing `TBRK` to avoid premature poll activation.
 5. **Syncs Postseason Bowls**: In bowl season, updates the National Championship game in `SCHD` to match CFP #1 vs CFP #2 and relocates displaced teams into available major bowl slots.
 6. **Displays Preview Tables**: Outputs Top 25 tables for CFP, AP, and Coaches polls, along with any bowl matchup diffs.

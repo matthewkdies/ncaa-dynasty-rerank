@@ -18,7 +18,7 @@ ncaa-dynasty-rerank rules path
 
 ---
 
-## Partial Overrides (Deep Merging)
+## Partial Overrides
 
 You do not need to specify every parameter in your custom JSON file. The configuration loader recursively merges user-supplied values on top of the built-in defaults:
 
@@ -92,6 +92,7 @@ You can use text names and abbreviations instead of numeric IDs in `conference_w
 ### Supported Team Aliases
 
 All FBS teams in NCAA Football 14 are supported by canonical name or standard abbreviations, including:
+
 - `"bama"`, `"alabama"` (TGID 3)
 - `"osu"`, `"ohio_state"` (TGID 70)
 - `"uf"`, `"florida"` (TGID 27)

@@ -46,5 +46,6 @@ ncaa-dynasty-rerank --help
 ## Dependencies
 
 The package has two runtime dependencies:
+
 - `pydantic >= 2.0.0`: Used for configuration models, validation, and serialization.
 - `rich >= 13.0.0`: Used for terminal output, tables, and syntax formatting.

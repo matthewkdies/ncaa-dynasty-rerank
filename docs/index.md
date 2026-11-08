@@ -34,6 +34,7 @@ flowchart TD
 ## Save File Safety
 
 Before writing any modifications to a save file, the tool:
+
 - Prompts for confirmation showing a side-by-side preview of proposed rank changes and bowl adjustments.
 - Creates an automatic, timestamped backup copy (`USR-DATA.bak.<timestamp>`) in the same directory.
 - Recalculates EA big-endian CRC-32 table checksums to ensure RPCS3 loads the save without data corruption errors.
