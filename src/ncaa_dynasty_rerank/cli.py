@@ -28,6 +28,7 @@ from ncaa_dynasty_rerank.postseason import BowlDiff, PostseasonSyncer
 from ncaa_dynasty_rerank.tdb import TDBFile
 
 console = Console()
+DOCS_URL = "https://matthewkdies.github.io/ncaa-dynasty-rerank/"
 
 
 # -----------------------------------------------------------------------------
@@ -327,6 +328,17 @@ def handle_rules_commands(args: argparse.Namespace, cfg: ConfigManager) -> int:
     return 0
 
 
+def handle_docs_command(args: argparse.Namespace) -> int:
+    """Displays or opens the official documentation website."""
+    console.print(f"[bold cyan]Documentation:[/bold cyan] {DOCS_URL}")
+    if getattr(args, "open", False):
+        import webbrowser
+
+        webbrowser.open(DOCS_URL)
+        console.print("[dim]Opened documentation in web browser.[/dim]")
+    return 0
+
+
 # -----------------------------------------------------------------------------
 # Re-ranking Pipeline Core
 # -----------------------------------------------------------------------------
@@ -483,6 +495,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ncaa-dynasty-rerank",
         description="Automated CFP, AP, and Coaches poll re-ranking engine for NCAA Football 14 saves.",
+        epilog=f"Documentation: {DOCS_URL}",
     )
     parser.add_argument("-d", "--dynasty", help="Dynasty alias name to use (configured via 'alias' command)")
     parser.add_argument("-s", "--save-path", help="Direct path to save directory or USR-DATA file")
@@ -543,6 +556,10 @@ def build_parser() -> argparse.ArgumentParser:
         "path", nargs="?", help="Path to rules file to validate (defaults to ~/.config/ncaa-dynasty-rerank/rules.json)"
     )
 
+    # docs subcommand
+    docs_parser = subparsers.add_parser("docs", help="Display or open official documentation website")
+    docs_parser.add_argument("-o", "--open", action="store_true", help="Open documentation in the default web browser")
+
     return parser
 
 
@@ -556,6 +573,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_alias_commands(args, cfg)
     if args.subcommand == "rules":
         return handle_rules_commands(args, cfg)
+    if args.subcommand == "docs":
+        return handle_docs_command(args)
 
     return execute_rerank(args, cfg)
 

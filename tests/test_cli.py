@@ -185,3 +185,12 @@ def test_cli_rerank_with_rules_flag(tmp_path):
         ["ncaa-dynasty-rerank", "--save-path", str(save_path), "--rules", str(rules_path), "--dry-run"],
     ):
         assert main() == 0
+
+
+def test_cli_docs_command():
+    with patch("sys.argv", ["ncaa-dynasty-rerank", "docs"]):
+        assert main() == 0
+
+    with patch("sys.argv", ["ncaa-dynasty-rerank", "docs", "--open"]), patch("webbrowser.open") as mock_open:
+        assert main() == 0
+        mock_open.assert_called_once()

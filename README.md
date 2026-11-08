@@ -1,12 +1,19 @@
 # 🏈 ncaa-dynasty-rerank
 
 [![CI Test Suite](https://github.com/matthewkdies/ncaa-dynasty-rerank/actions/workflows/ci.yml/badge.svg)](https://github.com/matthewkdies/ncaa-dynasty-rerank/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://matthewkdies.github.io/ncaa-dynasty-rerank/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 > *"Let's be honest: NCAA Football 14 is still better than the modern, Madden-copied games."*
 
-An automated, 100% pure-Python re-ranking engine for NCAA Football 14 (and College Football Revamped) dynasty saves. It analyzes real game schedules, opponent win rates, strength of record (SOR), margin of victory, and head-to-head match-ups to produce authentic CFP, AP, and Coaches Poll rankings. The tool modifies your RPCS3 save file in directly, quickly, and cleanly.
+An automated, 100% pure-Python re-ranking engine for NCAA Football 14 (and College Football Revamped) dynasty saves. It analyzes real game schedules, opponent win rates, strength of record (SOR), margin of victory, and head-to-head match-ups to produce authentic CFP, AP, and Coaches Poll rankings. The tool modifies your RPCS3 save file directly, quickly, and cleanly.
+
+📖 **Documentation**: [https://matthewkdies.github.io/ncaa-dynasty-rerank/](https://matthewkdies.github.io/ncaa-dynasty-rerank/)
+- [Installation Guide](https://matthewkdies.github.io/ncaa-dynasty-rerank/installation/)
+- [CLI Usage Guide](https://matthewkdies.github.io/ncaa-dynasty-rerank/usage/)
+- [Customizing Ranking Rules](https://matthewkdies.github.io/ncaa-dynasty-rerank/configuration/)
+- [Python API Reference](https://matthewkdies.github.io/ncaa-dynasty-rerank/python-api/)
 
 ---
 
