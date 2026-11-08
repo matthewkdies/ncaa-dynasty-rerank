@@ -85,6 +85,7 @@ from ncaa_dynasty_rerank.strategies.registry import PollRegistry
 from ncaa_dynasty_rerank.models import PollRanking, TeamRecord
 from ncaa_dynasty_rerank.engine import RankingEngine
 
+
 class SimpleWinPctStrategy(PollStrategy):
     name = "Raw Win Percentage Ranking"
     poll_type = "win_pct"
@@ -101,6 +102,7 @@ class SimpleWinPctStrategy(PollStrategy):
             )
             for i, t in enumerate(sorted_teams)
         ]
+
 
 # Register custom model
 registry = PollRegistry()
@@ -119,13 +121,15 @@ To persist new rankings to the save file, map updates by team `tgid` and call `t
 # Build update dictionaries
 update_payload = []
 for r in ap_poll:
-    update_payload.append({
-        "tgid": r.team.tgid,
-        "ap_rank": r.rank,
-        "ap_prev_rank": r.previous_rank,
-        "ap_points": r.points,
-        "ap_first_votes": r.first_place_votes,
-    })
+    update_payload.append(
+        {
+            "tgid": r.team.tgid,
+            "ap_rank": r.rank,
+            "ap_prev_rank": r.previous_rank,
+            "ap_points": r.points,
+            "ap_first_votes": r.first_place_votes,
+        }
+    )
 
 # Write to database and save
 tdb.update_team_polls(update_payload)

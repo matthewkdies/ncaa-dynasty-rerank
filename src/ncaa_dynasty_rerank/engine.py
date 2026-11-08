@@ -143,7 +143,10 @@ class RankingEngine:
             quality = (
                 opp_win_pct * self.config.win_opp_win_pct_factor + opp_sos * self.config.win_opp_sos_factor
             ) * conf_mod
-            if opp_conf in self.config.fcs_conference_ids or opp_win_pct < self.config.fcs_or_bad_team_win_pct_threshold:
+            if (
+                opp_conf in self.config.fcs_conference_ids
+                or opp_win_pct < self.config.fcs_or_bad_team_win_pct_threshold
+            ):
                 quality = min(quality, self.config.fcs_or_bad_team_quality_cap)
 
             return base + quality + margin_factor + location_bonus
@@ -194,7 +197,9 @@ class RankingEngine:
             q_win_rate = q_wins / max(1, team.games_played)
 
             loss_penalty = team.losses * self.config.loss_penalty_multiplier
-            win_pct_component = (team.win_pct * self.config.win_pct_multiplier) + self.config.win_pct_base - loss_penalty
+            win_pct_component = (
+                (team.win_pct * self.config.win_pct_multiplier) + self.config.win_pct_base - loss_penalty
+            )
 
             resume_score = (
                 win_pct_component
